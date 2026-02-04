@@ -206,11 +206,54 @@ def analyze_country(country_name, identity_layer="base", base_analysis=None):
         if nsc_level:
             print(f"Israeli NSC Warning Level: {nsc_level}/4")
     
+    # Load recent headlines from ingestion
+    recent_headlines = []
+    try:
+        with open("latest_headlines.json", "r", encoding="utf-8") as f:
+            headlines_data = json.load(f)
+            all_headlines = headlines_data.get("headlines", [])
+            
+            # Filter headlines relevant to this country
+            country_keywords = [country_name.lower()]
+            # Add common alternate names
+            if country_name == "USA":
+                country_keywords.extend(["united states", "america", "us ", "u.s."])
+            elif country_name == "United Kingdom":
+                country_keywords.extend(["uk", "britain", "british"])
+            elif country_name == "Democratic Republic of the Congo":
+                country_keywords.extend(["drc", "congo"])
+                
+            for headline in all_headlines:
+                if any(keyword in headline.lower() for keyword in country_keywords):
+                    recent_headlines.append(headline)
+        
+        print(f"Found {len(recent_headlines)} relevant headlines from recent ingestion")
+        
+    except FileNotFoundError:
+        print("[!] No recent headlines found - analysis will rely on Gemini's knowledge only")
+    
     # Build prompt
     prompt = build_analysis_prompt(country_name, identity_layer, nsc_level, base_analysis)
     
-    # Use Gemini's current knowledge (don't specify a future date)
-    prompt += f"\n\nAnalyze {country_name} based on your current knowledge and recent events."
+    # Add recent headlines as context
+    if recent_headlines:
+        current_time = datetime.now(timezone.utc).strftime("%B %d, %Y at %H:%M UTC")
+        prompt += f"\n\n=== CURRENT DATE/TIME ===\n"
+        prompt += f"Today is: {current_time}\n\n"
+        prompt += f"=== RECENT NEWS CONTEXT ===\n"
+        prompt += f"Here are recent headlines about {country_name}:\n\n"
+        for i, headline in enumerate(recent_headlines[:30], 1):  # Max 30 headlines
+            prompt += f"{i}. {headline}\n"
+        prompt += f"\n=== ANALYSIS INSTRUCTIONS ===\n"
+        prompt += f"Use BOTH:\n"
+        prompt += f"1. Your comprehensive background knowledge of {country_name} (history, geography, political system, etc.)\n"
+        prompt += f"2. The recent headlines above for CURRENT conditions and recent developments\n\n"
+        prompt += f"If headlines contradict your training data, TRUST THE HEADLINES - they are more recent.\n"
+        prompt += f"If headlines don't cover a threat category, use your background knowledge to assess it.\n"
+    else:
+        current_time = datetime.now(timezone.utc).strftime("%B %d, %Y at %H:%M UTC")
+        prompt += f"\n\nToday is: {current_time}\n"
+        prompt += f"Analyze {country_name} based on your current knowledge and recent events."
     
     try:
         print("Sending request to Gemini 2.5 Flash...")
@@ -305,8 +348,18 @@ Severity guide:
 
 {chr(10).join(verification.get('problems', []))}
 
-Please provide a corrected analysis addressing these specific problems. Use the same JSON structure but fix the identified errors.
+Please provide a corrected analysis addressing these specific problems.
+
 """
+                
+                # Add headlines to correction
+                if recent_headlines:
+                    correction_prompt += f"Use these RECENT headlines for current context:\n"
+                    for i, headline in enumerate(recent_headlines[:30], 1):
+                        correction_prompt += f"{i}. {headline}\n"
+                    correction_prompt += "\nBase your corrected analysis on these recent headlines.\n"
+                
+                correction_prompt += "\nUse the same JSON structure but fix the identified errors."
                 
                 try:
                     retry_response = client.models.generate_content(
@@ -441,6 +494,8 @@ def store_analysis(country_id, identity_layer, analysis):
         "ai_summary": analysis.get("summary"),
         "veto_explanation": analysis.get("reasoning"),
         "recommendations": json.dumps(analysis.get("recommendations", {})),
+        "watch_factors": analysis.get("watch_factors", ""),
+        "sources": json.dumps(analysis.get("sources", [])),
         "scored_at": datetime.now(timezone.utc).isoformat()
     }
     

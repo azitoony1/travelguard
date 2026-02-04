@@ -300,7 +300,47 @@
         .close-detail:hover { color: var(--text); }
         
         .detail-content {
+            padding: 0;
+        }
+        
+        .detail-tabs {
+            display: flex;
+            gap: 0;
+            border-bottom: 2px solid var(--border);
+            background: var(--surface-elevated);
+            padding: 0 24px;
+        }
+        
+        .detail-tab {
+            font-family: 'JetBrains Mono', monospace;
+            padding: 16px 20px;
+            font-size: 12px;
+            font-weight: 500;
+            background: transparent;
+            border: none;
+            color: var(--text-dim);
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s ease;
+        }
+        
+        .detail-tab:hover {
+            color: var(--text);
+            background: var(--surface);
+        }
+        
+        .detail-tab.active {
+            color: var(--accent);
+            border-bottom-color: var(--accent);
+        }
+        
+        .detail-tab-content {
             padding: 24px;
+            display: none;
+        }
+        
+        .detail-tab-content.active {
+            display: block;
         }
         
         .detail-threat-badge {
@@ -691,6 +731,23 @@
         let countryLayers = {};
         let geoJsonLayer;
         
+        // Map GeoJSON country names to database names
+        const COUNTRY_NAME_MAP = {
+            'United States of America': 'USA',
+            'United States': 'USA',
+            'Russian Federation': 'Russia',
+            'Republic of the Congo': 'Democratic Republic of the Congo',
+            'Congo (Kinshasa)': 'Democratic Republic of the Congo',
+            'Iran (Islamic Republic of)': 'Iran',
+            'United Kingdom': 'United Kingdom',
+            'Netherlands': 'Netherlands',
+            'Israel': 'Israel'
+        };
+        
+        function normalizeCountryName(geoName) {
+            return COUNTRY_NAME_MAP[geoName] || geoName;
+        }
+        
         const THREAT_LABELS = {
             'GREEN': 'Low',
             'YELLOW': 'Elevated',
@@ -707,15 +764,15 @@
             'PURPLE': '#8b4fc9'
         };
         
-        // Manual country bounds
+        // Manual country bounds (for countries with overseas territories or wrapping issues)
         const COUNTRY_BOUNDS = {
             'Netherlands': [[50.75, 3.36], [53.55, 7.23]],
             'Israel': [[29.5, 34.3], [33.3, 35.9]],
+            'USA': [[24.5, -125], [49.4, -66.9]],  // Continental US only
+            'France': [[41.3, -5.2], [51.1, 9.6]],  // Metropolitan France only
+            'Russia': [[41.2, 19.6], [81.9, 180]],  // Western Russia to avoid wrap
             'Aruba': [[12.4, -70.1], [12.6, -69.8]]
         };
-        
-        // ONLY analyze these countries for MVP
-        const MVP_COUNTRIES = ['Israel', 'Netherlands'];
         
         async function fetchScores() {
             const r = await fetch(`${SUPABASE_URL}/rest/v1/scores?select=*,countries(name,iso_code)`, {
@@ -726,18 +783,16 @@
             scoresData = {};
             data.forEach(score => {
                 const country = score.countries.name;
-                // ONLY keep MVP countries
-                if (MVP_COUNTRIES.includes(country)) {
-                    if (!scoresData[country]) scoresData[country] = {};
-                    scoresData[country][score.identity_layer] = score;
-                }
+                if (!scoresData[country]) scoresData[country] = {};
+                scoresData[country][score.identity_layer] = score;
             });
             
-            console.log('MVP Countries with scores:', Object.keys(scoresData));
+            console.log('Countries with scores:', Object.keys(scoresData));
         }
         
         function getCountryStyle(feature) {
-            const countryName = feature.properties.name;
+            const geoName = feature.properties.name;
+            const countryName = normalizeCountryName(geoName);
             const score = scoresData[countryName]?.[currentLayer];
             
             if (score) {
@@ -778,44 +833,75 @@
             
             const level = score.total_score.toLowerCase();
             const label = THREAT_LABELS[score.total_score];
-            const recs = JSON.parse(score.recommendations || '{}');
+            
+            // Safe JSON parsing with fallbacks
+            let recs = {};
+            try {
+                recs = score.recommendations ? JSON.parse(score.recommendations) : {};
+            } catch (e) {
+                console.warn('Failed to parse recommendations:', e);
+                recs = {};
+            }
+            
+            let sources = [];
+            try {
+                sources = score.sources ? JSON.parse(score.sources) : [];
+            } catch (e) {
+                console.warn('Failed to parse sources:', e);
+                sources = [];
+            }
+            
             const watchFactors = score.watch_factors || '';
-            const sources = JSON.parse(score.sources || '[]');
             const credibilityWarning = score._credibility_warning || '';
             const credibilityNote = score._credibility_note || '';
             
             document.getElementById('detail-country-name').textContent = countryName;
             document.getElementById('detail-content').innerHTML = `
                 ${credibilityWarning ? `
-                <div style="background: var(--red); color: #fff; padding: 12px; border-radius: 8px; margin-bottom: 16px;">
+                <div style="background: var(--red); color: #fff; padding: 12px; margin: 24px; border-radius: 8px;">
                     <strong>⚠️ Data Quality Warning:</strong> ${credibilityWarning}
                 </div>
                 ` : ''}
                 ${credibilityNote ? `
-                <div style="background: var(--yellow); color: #000; padding: 12px; border-radius: 8px; margin-bottom: 16px;">
+                <div style="background: var(--yellow); color: #000; padding: 12px; margin: 24px; border-radius: 8px;">
                     <strong>ℹ️ Note:</strong> ${credibilityNote}
                 </div>
                 ` : ''}
-                <div class="detail-threat-badge ${level}">${label}</div>
-                <div class="threat-categories">
-                    ${['armed_conflict', 'regional_instability', 'terrorism', 'civil_strife', 'crime', 'health', 'infrastructure'].map(cat => `
-                        <div class="category-item">
-                            <span class="category-name">${cat.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</span>
-                            <span class="category-level ${score[cat].toLowerCase()}">${THREAT_LABELS[score[cat]]}</span>
-                        </div>
-                    `).join('')}
+                
+                <div style="padding: 24px;">
+                    <div class="detail-threat-badge ${level}">${label}</div>
+                    <div class="threat-categories">
+                        ${['armed_conflict', 'regional_instability', 'terrorism', 'civil_strife', 'crime', 'health', 'infrastructure'].map(cat => `
+                            <div class="category-item">
+                                <span class="category-name">${cat.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</span>
+                                <span class="category-level ${score[cat].toLowerCase()}">${THREAT_LABELS[score[cat]]}</span>
+                            </div>
+                        `).join('')}
+                    </div>
                 </div>
-                <div class="detail-section">
-                    <div class="section-title">Situation Assessment</div>
-                    <div class="section-content">${score.ai_summary || 'No summary.'}</div>
+                
+                <div class="detail-tabs">
+                    <button class="detail-tab active" onclick="switchTab(event, 'assessment')">Situation Assessment</button>
+                    <button class="detail-tab" onclick="switchTab(event, 'outlook')">Expected Developments</button>
+                    <button class="detail-tab" onclick="switchTab(event, 'recommendations')">Recommendations</button>
                 </div>
-                ${watchFactors ? `
-                <div class="detail-section">
+                
+                <div id="tab-assessment" class="detail-tab-content active">
+                    <div class="section-content">${score.ai_summary || 'No summary available.'}</div>
+                    ${sources.length > 0 ? `
+                    <div style="margin-top: 24px;">
+                        <div class="section-title">Sources for Further Research</div>
+                        ${sources.map(source => `<div style="margin-bottom: 8px;">• ${source}</div>`).join('')}
+                    </div>
+                    ` : ''}
+                </div>
+                
+                <div id="tab-outlook" class="detail-tab-content">
                     <div class="section-title">Key Developments to Monitor</div>
-                    <div class="section-content">${watchFactors}</div>
+                    <div class="section-content">${watchFactors || 'No specific developments identified to monitor at this time.'}</div>
                 </div>
-                ` : ''}
-                <div class="detail-section">
+                
+                <div id="tab-recommendations" class="detail-tab-content">
                     <div class="section-title">Safety Recommendations</div>
                     ${Object.entries(recs).map(([k,v]) => `
                         <div class="rec-item">
@@ -824,14 +910,6 @@
                         </div>
                     `).join('')}
                 </div>
-                ${sources.length > 0 ? `
-                <div class="detail-section">
-                    <div class="section-title">Sources for Further Research</div>
-                    <div class="section-content">
-                        ${sources.map(source => `<div style="margin-bottom: 8px;">• ${source}</div>`).join('')}
-                    </div>
-                </div>
-                ` : ''}
             `;
             
             document.getElementById('detail-panel').classList.add('open');
@@ -844,11 +922,27 @@
             }
         }
         
+        window.switchTab = function(event, tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.detail-tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.detail-tab').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // Show selected tab
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+            event.target.classList.add('active');
+        };
+        
         function closeDetail() {
             document.getElementById('detail-panel').classList.remove('open');
         }
         
         window.backToMap = function() {
+            // Close detail panel
+            document.getElementById('detail-panel').classList.remove('open');
             // Zoom out to world view
             map.setView([35, 20], 3, { animate: true, duration: 0.5 });
         };
@@ -875,14 +969,23 @@
             fullData.features.forEach(feature => {
                 const name = feature.properties.name;
                 
-                // Skip explicitly named Caribbean territories
-                const caribbeanTerritories = [
+                // Skip explicitly named overseas territories
+                const overseasTerritories = [
+                    // Caribbean Netherlands
                     'Aruba', 'Curaçao', 'Curacao', 'Sint Maarten', 'Bonaire', 
-                    'Saba', 'Sint Eustatius', 'Caribbean Netherlands'
+                    'Saba', 'Sint Eustatius', 'Caribbean Netherlands',
+                    // French overseas
+                    'French Guiana', 'Martinique', 'Guadeloupe', 'Réunion', 'Reunion',
+                    'Mayotte', 'French Polynesia', 'New Caledonia', 'Wallis and Futuna',
+                    'Saint Pierre and Miquelon', 'Saint Barthélemy', 'Saint Martin',
+                    'French Southern and Antarctic Lands',
+                    // Other
+                    'Puerto Rico', 'Guam', 'US Virgin Islands', 'American Samoa',
+                    'Greenland', 'Faroe Islands'
                 ];
                 
-                if (caribbeanTerritories.includes(name)) {
-                    console.log('Skipping Caribbean territory:', name);
+                if (overseasTerritories.includes(name)) {
+                    console.log('Skipping overseas territory:', name);
                     return;
                 }
                 
@@ -891,10 +994,7 @@
                     const europeanPolygons = [];
                     
                     feature.geometry.coordinates.forEach(polygon => {
-                        // Check first coordinate of this polygon
                         const lat = polygon[0][0][1];
-                        
-                        // Only keep if latitude > 30 (Europe, not Caribbean at ~12°N)
                         if (lat > 30) {
                             europeanPolygons.push(polygon);
                         } else {
@@ -902,7 +1002,6 @@
                         }
                     });
                     
-                    // Only add if we have European polygons
                     if (europeanPolygons.length > 0) {
                         const europeanFeature = {
                             ...feature,
@@ -912,6 +1011,33 @@
                             }
                         };
                         filteredFeatures.push(europeanFeature);
+                    }
+                    
+                // For France, split MultiPolygon and only keep Metropolitan France
+                } else if (name === 'France' && feature.geometry.type === 'MultiPolygon') {
+                    const metropolitanPolygons = [];
+                    
+                    feature.geometry.coordinates.forEach(polygon => {
+                        const lat = polygon[0][0][1];
+                        const lon = polygon[0][0][0];
+                        
+                        // Metropolitan France: lat 41-51°N, lon -5 to 10°E
+                        if (lat > 40 && lat < 52 && lon > -6 && lon < 10) {
+                            metropolitanPolygons.push(polygon);
+                        } else {
+                            console.log('Filtering French overseas polygon at lat/lon:', lat, lon);
+                        }
+                    });
+                    
+                    if (metropolitanPolygons.length > 0) {
+                        const metropolitanFeature = {
+                            ...feature,
+                            geometry: {
+                                type: 'MultiPolygon',
+                                coordinates: metropolitanPolygons
+                            }
+                        };
+                        filteredFeatures.push(metropolitanFeature);
                     }
                 } else {
                     // Keep all other countries as-is
@@ -929,7 +1055,8 @@
             geoJsonLayer = L.geoJSON(filteredData, {
                 style: getCountryStyle,
                 onEachFeature: (feature, layer) => {
-                    const countryName = feature.properties.name;
+                    const geoName = feature.properties.name;
+                    const countryName = normalizeCountryName(geoName);
                     countryLayers[countryName] = layer;
                     
                     const score = scoresData[countryName]?.[currentLayer];
@@ -939,7 +1066,14 @@
                             mouseover: () => layer.setStyle({ weight: 4, color: '#58a6ff', fillOpacity: 0.7 }),
                             mouseout: () => layer.setStyle(getCountryStyle(feature)),
                             click: () => {
-                                console.log('Clicked MVP country:', countryName);
+                                console.log('=== CLICK DEBUG ===');
+                                console.log('GeoJSON name:', geoName);
+                                console.log('Normalized name:', countryName);
+                                console.log('Score exists:', !!scoresData[countryName]);
+                                console.log('Current layer:', currentLayer);
+                                if (scoresData[countryName]) {
+                                    console.log('Available layers:', Object.keys(scoresData[countryName]));
+                                }
                                 showCountryDetail(countryName);
                             }
                         });
