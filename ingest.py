@@ -187,6 +187,17 @@ def ingest_global_sources(config):
             for entry in data["entries"][:10]:
                 headlines.append(entry.get("title", ""))
     
+    # Global news sources (BBC, Le Monde, Reuters)
+    print("\n━━━ GLOBAL NEWS ━━━")
+    for source in config.get("global_news", []):
+        print(f"\n{source['name']}")
+        data = fetch_source(source)
+        store_source_data(source["name"], source["url"], None, data)
+        
+        if data and "entries" in data:
+            for entry in data["entries"][:15]:  # More headlines from news
+                headlines.append(entry.get("title", ""))
+    
     print("\n━━━ GLOBAL IDENTITY SOURCES ━━━")
     identity_sources = config.get("global_identity", {})
     for identity_layer, sources in identity_sources.items():

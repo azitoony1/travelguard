@@ -1,25 +1,32 @@
-# TravelGuard — Data Sources Configuration (Fixed & Optimized)
+# TravelGuard — Data Sources Configuration
 # 
 # This file defines all the sources the system pulls data from.
 # To add a new source, just add an entry here — no code changes needed.
 #
 # Tier 1: Cheap sources (poll every 2 hours)
 # Tier 2: LLM analysis (runs every 12 hours)
+# Tier 3: Reserved for future Scout agent
 
 # ============================================================================
 # GLOBAL SOURCES (apply to all countries)
 # ============================================================================
 
 global_base:
-  - name: "US State Department Travel Advisories RSS"
-    type: rss
-    url: "https://travel.state.gov/_res/rss/TAsTWs.xml"
+  - name: "US State Department Travel Advisories"
+    type: scrape
+    url: "https://travel.state.gov/content/travel/en/traveladvisories/traveladvisories.html"
     tier: 1
     refresh_hours: 2
     
-  - name: "WHO Disease Outbreak News RSS"
-    type: rss
-    url: "https://www.who.int/feeds/entity/csr/don/en/rss.xml"
+  - name: "UK FCDO Travel Advice"
+    type: scrape
+    url: "https://www.gov.uk/foreign-travel-advice"
+    tier: 1
+    refresh_hours: 2
+    
+  - name: "WHO Health Alerts"
+    type: api
+    url: "https://www.who.int/emergencies/disease-outbreak-news"
     tier: 1
     refresh_hours: 2
 
@@ -27,17 +34,51 @@ global_identity:
   jewish_israeli:
     - name: "Israeli NSC Travel Warnings"
       type: scrape
-      url: "https://www.gov.il/en/departments/dynamiccollectors/travel-warnings-nsc"
+      url: "https://www.gov.il/he/departments/dynamiccollectors/travel-warnings-nsc"
       tier: 1
       refresh_hours: 2
-      note: "English version of Israeli government travel warnings for Jews/Israelis abroad"
-    
-    - name: "Times of Israel - Antisemitism Tag RSS"
+  
+  solo_women:
+    - name: "UN Women News"
       type: rss
-      url: "https://www.timesofisrael.com/tag/antisemitism/feed/"
+      url: "https://www.unwomen.org/en/news/rss"
       tier: 1
-      refresh_hours: 2
-      note: "Global antisemitism news feed"
+      refresh_hours: 6
+      
+    - name: "Women's Safety Global Database"
+      type: scrape
+      url: "https://evaw-global-database.unwomen.org/en"
+      tier: 1
+      refresh_hours: 24
+      
+    - name: "Georgetown Institute for Women Peace Security"
+      type: scrape  
+      url: "https://giwps.georgetown.edu/country-index/"
+      tier: 1
+      refresh_hours: 24
+
+# ============================================================================
+# MAJOR NEWS SOURCES (for MVP countries)
+# ============================================================================
+
+global_news:
+  - name: "BBC World News RSS"
+    type: rss
+    url: "https://feeds.bbci.co.uk/news/world/rss.xml"
+    tier: 1
+    refresh_hours: 2
+    
+  - name: "Le Monde International RSS (French)"
+    type: rss
+    url: "https://www.lemonde.fr/international/rss_full.xml"
+    tier: 1
+    refresh_hours: 2
+    
+  - name: "Reuters World News RSS"
+    type: rss
+    url: "https://www.reutersagency.com/feed/?taxonomy=best-regions&post_type=best"
+    tier: 1
+    refresh_hours: 2
 
 # ============================================================================
 # ISRAEL — Country-Specific Sources
@@ -45,22 +86,15 @@ global_identity:
 
 israel:
   base:
-    - name: "Israel Red Alert API"
+    - name: "Israel Red Alert Feed"
       type: api
       url: "https://www.oref.org.il/WarningMessages/alert/alerts.json"
       tier: 1
       refresh_hours: 2
-      note: "Returns empty JSON when no active alerts (this is good news!)"
       
     - name: "Times of Israel RSS"
       type: rss
       url: "https://www.timesofisrael.com/feed/"
-      tier: 1
-      refresh_hours: 2
-      
-    - name: "Jerusalem Post RSS"
-      type: rss
-      url: "https://www.jpost.com/rss/rssfeedsheadlines.aspx"
       tier: 1
       refresh_hours: 2
 
@@ -82,32 +116,22 @@ netherlands:
       tier: 1
       refresh_hours: 2
       
-    - name: "Dutch News - General RSS"
-      type: rss
-      url: "https://www.dutchnews.nl/feed/"
-      tier: 1
-      refresh_hours: 2
-      note: "English language Netherlands news"
-      
-    - name: "NCTV Terrorism Threat Assessment"
+    - name: "NL-Alert"
       type: scrape
-      url: "https://english.nctv.nl/topics/terrorist-threat-assessment-netherlands/documents"
+      url: "https://actueel.nl-alert.nl/alerts/"
       tier: 1
       refresh_hours: 2
-      note: "Quarterly reports - may fail if site blocks scrapers"
+      
+    - name: "NCTV Threat Assessments"
+      type: scrape
+      url: "https://www.nctv.nl/onderwerpen/dreigingsbeeld-terrorisme-nederland"
+      tier: 1
+      refresh_hours: 2
   
   identity:
     jewish_israeli:
-      - name: "CIDI Annual Reports Page"
+      - name: "CIDI Antisemitism Monitor"
         type: scrape
         url: "https://www.cidi.nl/antisemitisme/"
         tier: 1
         refresh_hours: 2
-        note: "Annual antisemitism monitor - may fail if site blocks scrapers"
-        
-      - name: "Dutch News RSS (filter for antisemitism)"
-        type: rss
-        url: "https://www.dutchnews.nl/feed/"
-        tier: 1
-        refresh_hours: 2
-        note: "Filter during analysis for Jewish community / antisemitism content"

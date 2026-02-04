@@ -151,6 +151,7 @@ Return your analysis as valid JSON with this exact structure:
   "infrastructure": "GREEN|YELLOW|ORANGE|RED|PURPLE",
   "reasoning": "Brief explanation of key threats driving the scores",
   "summary": "2-3 paragraph plain-English summary of the current situation",
+  "watch_factors": "2-3 key developments to monitor that could change the risk outlook (e.g., upcoming elections, ongoing conflicts, diplomatic tensions)",
   "recommendations": {
     "movement_access": "One sentence recommendation",
     "emergency_preparedness": "One sentence recommendation",
@@ -158,10 +159,16 @@ Return your analysis as valid JSON with this exact structure:
     "health_medical": "One sentence recommendation",
     "crime_personal_safety": "One sentence recommendation",
     "travel_logistics": "One sentence recommendation"
-  }
+  },
+  "sources": [
+    "Source 1: Official government travel advisory URL or name",
+    "Source 2: Reputable news organization covering this region",
+    "Source 3: Local embassy or consulate contact"
+  ]
 }
 
 Be specific, factual, and direct. Cite recent incidents when relevant.
+For sources, provide 3-5 reliable sources for further research (official advisories, news outlets, embassies).
 """
     
     return base_prompt
@@ -229,6 +236,56 @@ def analyze_country(country_name, identity_layer="base", base_analysis=None):
         analysis = json.loads(response_text)
         
         print("[OK] Analysis complete")
+        
+        # Self-verification: Check for hallucinations
+        print("[>] Running hallucination check...")
+        verify_prompt = f"""You are a fact-checker. Review this travel security analysis for {country_name} and identify any factual errors or hallucinations.
+
+Analysis to verify:
+{json.dumps(analysis, indent=2)}
+
+Check for:
+- Invented incidents that didn't happen
+- Incorrect statistics or dates  
+- Fabricated advisories or sources
+- Claims contradicting well-known facts
+
+Respond with JSON:
+{{
+  "has_issues": true/false,
+  "problems": ["List specific issues, or empty if none"],
+  "confidence": "HIGH|MEDIUM|LOW"
+}}
+"""
+        
+        try:
+            verify_response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=verify_prompt
+            )
+            
+            verify_text = verify_response.text.strip()
+            if verify_text.startswith("```json"):
+                verify_text = verify_text[7:]
+            if verify_text.startswith("```"):
+                verify_text = verify_text[3:]
+            if verify_text.endswith("```"):
+                verify_text = verify_text[:-3]
+            verify_text = verify_text.strip()
+            
+            verification = json.loads(verify_text)
+            
+            if verification.get("has_issues"):
+                print(f"[!] Potential issues detected:")
+                for issue in verification.get("problems", []):
+                    print(f"    - {issue}")
+                print(f"    Confidence: {verification.get('confidence')}")
+            else:
+                print(f"[OK] Verification passed ({verification.get('confidence')} confidence)")
+                
+        except Exception as ve:
+            print(f"[!] Verification check failed: {ve}")
+        
         print(f"  Armed Conflict: {analysis.get('armed_conflict')}")
         print(f"  Terrorism: {analysis.get('terrorism')}")
         print(f"  Crime: {analysis.get('crime')}")
