@@ -150,8 +150,8 @@ Return your analysis as valid JSON with this exact structure:
   "health": "GREEN|YELLOW|ORANGE|RED|PURPLE",
   "infrastructure": "GREEN|YELLOW|ORANGE|RED|PURPLE",
   "reasoning": "Brief explanation of key threats driving the scores",
-  "summary": "2-3 paragraph plain-English summary of the current situation",
-  "watch_factors": "2-3 key developments to monitor that could change the risk outlook (e.g., upcoming elections, ongoing conflicts, diplomatic tensions)",
+  "summary": "Write 2-3 SHORT paragraphs (150-200 words total). Use simple, direct sentences. Say what's actually happening - specific incidents, dates, numbers. Avoid words like 'complex', 'multifaceted', 'notably', 'furthermore'. Write like you're briefing a friend, not writing a report.",
+  "watch_factors": "List 2-3 SPECIFIC events/deadlines (e.g., 'Presidential election May 15, 2026', 'Israel-Hezbollah ceasefire ends March 2026', 'Monsoon season June-September'). Include dates when known. No vague statements.",
   "recommendations": {
     "movement_access": "One sentence recommendation",
     "emergency_preparedness": "One sentence recommendation",
@@ -161,14 +161,18 @@ Return your analysis as valid JSON with this exact structure:
     "travel_logistics": "One sentence recommendation"
   },
   "sources": [
-    "Source 1: Official government travel advisory URL or name",
-    "Source 2: Reputable news organization covering this region",
-    "Source 3: Local embassy or consulate contact"
+    "List 3-4 real sources only. Format: 'US State Department Travel Advisory' or 'BBC News: Iran' - NO URLs unless you have the exact one. NEVER write '[Your Country]' or 'local embassy' generically. If you don't have a specific source, skip it."
   ]
 }
 
-Be specific, factual, and direct. Cite recent incidents when relevant.
-For sources, provide 3-5 reliable sources for further research (official advisories, news outlets, embassies).
+CRITICAL REQUIREMENTS:
+- Write like a human analyst, not an AI
+- Avoid AI phrases: "complex environment", "it's important to note", "multifaceted", "notably"
+- Be concrete: "12 killed in bombing" not "security incident occurred"
+- NO PLACEHOLDERS - never use brackets [ ] or generic descriptions
+- Keep summary under 200 words total - be brief
+- Sources: US State Dept, UK FCDO, BBC, Reuters, Le Monde OK. NO Al Jazeera, NO RT
+- If you can't be specific, don't include it
 """
     
     return base_prompt
@@ -259,7 +263,12 @@ def analyze_country(country_name, identity_layer="base", base_analysis=None):
         print("Sending request to Gemini 2.5 Flash...")
         response = client.models.generate_content(
             model='gemini-2.5-flash',
-            contents=prompt
+            contents=prompt,
+            config={
+                'temperature': 0.0,  # Maximum consistency - same input = same output
+                'top_p': 0.95,
+                'top_k': 40
+            }
         )
         
         # Parse JSON response
@@ -281,31 +290,30 @@ def analyze_country(country_name, identity_layer="base", base_analysis=None):
         
         # Self-verification: Check for hallucinations
         print("[>] Running hallucination check...")
-        verify_prompt = f"""You are a fact-checker. Review this travel security analysis for {country_name} and identify any factual errors or hallucinations.
+        verify_prompt = f"""You are a fact-checker. Review this travel security analysis for {country_name} and identify ONLY serious factual errors that would mislead travelers.
 
 Analysis to verify:
 {json.dumps(analysis, indent=2)}
 
-Check for:
-- Invented incidents that didn't happen
-- Incorrect statistics or dates  
-- Fabricated advisories or sources
-- Claims contradicting well-known facts
-- Logical errors (e.g., wrong threat categorization)
+Check ONLY for:
+- Completely fabricated events (events that never happened)
+- Major factual errors (wrong country, wrong continent, impossible statistics)
+- Dangerous misinformation (claiming safe when actually dangerous)
+
+IGNORE:
+- Minor wording issues or subjective phrasing
+- Debate about threat categorization (that's subjective)
+- Slightly outdated information that's still generally accurate
+- AI-sounding language (we'll fix that separately)
 
 Respond with JSON:
 {{
-  "has_issues": true/false,
-  "problems": ["List specific issues, or empty if none"],
-  "confidence": "HIGH|MEDIUM|LOW",
-  "severity": "CRITICAL|MAJOR|MINOR|NONE"
+  "has_critical_issues": true/false,
+  "problems": ["Only list CRITICAL problems that would endanger travelers"],
+  "severity": "CRITICAL|NONE"
 }}
 
-Severity guide:
-- CRITICAL: Fabricated events, completely wrong facts, dangerous misinformation
-- MAJOR: Significant logical errors, wrong categorization, outdated info presented as current
-- MINOR: Small inconsistencies, unclear phrasing, debatable interpretations
-- NONE: No issues found
+Only flag as CRITICAL if the analysis would genuinely mislead or endanger someone.
 """
         
         try:
@@ -325,75 +333,18 @@ Severity guide:
             
             verification = json.loads(verify_text)
             
-            has_issues = verification.get("has_issues", False)
+            has_critical = verification.get("has_critical_issues", False)
             severity = verification.get("severity", "NONE")
-            confidence = verification.get("confidence", "MEDIUM")
             
-            # Decision logic based on severity and confidence
-            if severity == "CRITICAL" and confidence == "HIGH":
-                print(f"[X] BLOCKED - Critical issues detected:")
+            # ONLY block if truly critical
+            if has_critical and severity == "CRITICAL":
+                print(f"[X] BLOCKED - Critical safety issues detected:")
                 for issue in verification.get("problems", []):
                     print(f"    - {issue}")
                 print(f"    This analysis will NOT be stored.")
                 return None
-                
-            elif severity == "MAJOR":
-                print(f"[!] MAJOR issues detected - Requesting refinement:")
-                for issue in verification.get("problems", []):
-                    print(f"    - {issue}")
-                
-                # Auto-retry with correction prompt
-                print(f"[>] Attempting to fix issues...")
-                correction_prompt = f"""The previous analysis for {country_name} had these issues:
-
-{chr(10).join(verification.get('problems', []))}
-
-Please provide a corrected analysis addressing these specific problems.
-
-"""
-                
-                # Add headlines to correction
-                if recent_headlines:
-                    correction_prompt += f"Use these RECENT headlines for current context:\n"
-                    for i, headline in enumerate(recent_headlines[:30], 1):
-                        correction_prompt += f"{i}. {headline}\n"
-                    correction_prompt += "\nBase your corrected analysis on these recent headlines.\n"
-                
-                correction_prompt += "\nUse the same JSON structure but fix the identified errors."
-                
-                try:
-                    retry_response = client.models.generate_content(
-                        model='gemini-2.5-flash',
-                        contents=prompt + "\n\n" + correction_prompt
-                    )
-                    
-                    retry_text = retry_response.text.strip()
-                    if retry_text.startswith("```json"):
-                        retry_text = retry_text[7:]
-                    if retry_text.startswith("```"):
-                        retry_text = retry_text[3:]
-                    if retry_text.endswith("```"):
-                        retry_text = retry_text[:-3]
-                    retry_text = retry_text.strip()
-                    
-                    corrected_analysis = json.loads(retry_text)
-                    print("[OK] Corrected analysis generated")
-                    analysis = corrected_analysis
-                    
-                except Exception as retry_error:
-                    print(f"[!] Correction failed: {retry_error}")
-                    print(f"[!] Using original analysis with WARNING flag")
-                    analysis['_credibility_warning'] = f"MAJOR issues detected: {', '.join(verification.get('problems', []))}"
-                    
-            elif severity == "MINOR" or (has_issues and confidence == "LOW"):
-                print(f"[!] Minor issues detected (will still be stored):")
-                for issue in verification.get("problems", []):
-                    print(f"    - {issue}")
-                print(f"    Confidence: {confidence}")
-                analysis['_credibility_note'] = f"Minor issues flagged: {', '.join(verification.get('problems', []))}"
-                
             else:
-                print(f"[OK] Verification passed ({confidence} confidence, {severity} severity)")
+                print(f"[OK] Verification passed")
                 
         except Exception as ve:
             print(f"[!] Verification check failed: {ve}")
@@ -527,44 +478,64 @@ def get_country_id(iso_code):
 
 def should_analyze_country(country_name, country_id):
     """
-    Determine if a country needs re-analysis based on whether
-    new headlines have been ingested since last analysis.
+    Determine if a country needs re-analysis.
     
-    Always analyze if country has never been scored before.
+    Rules:
+    1. Never analyzed before → Analyze
+    2. Last analysis > 24 hours old → Analyze
+    3. Headlines timestamp > last analysis timestamp → Analyze
+    4. Otherwise → Skip (use cached)
     """
     
-    # Check if country has ever been analyzed
+    # Check if country has ever been analyzed and when
     try:
-        result = supabase.table("scores").select("id").eq("country_id", country_id).limit(1).execute()
+        result = supabase.table("scores").select("scored_at").eq("country_id", country_id).order("scored_at", desc=True).limit(1).execute()
         
         if not result.data:
             # Never analyzed before - always analyze
-            print(f"  [NEW] {country_name} has never been analyzed - will analyze now")
+            print(f"  [NEW] {country_name} has never been analyzed")
+            return True
+        
+        last_scored = result.data[0]["scored_at"]
+        last_scored_dt = datetime.fromisoformat(last_scored.replace('Z', '+00:00'))
+        hours_since = (datetime.now(timezone.utc) - last_scored_dt).total_seconds() / 3600
+        
+        # If analysis is > 24 hours old, re-analyze
+        if hours_since > 24:
+            print(f"  [OLD] {country_name} last analyzed {hours_since:.1f} hours ago")
             return True
             
     except Exception as e:
         print(f"  [!] Could not check analysis history: {e}")
         return True
     
-    # Check if headlines file exists and has recent data for this country
+    # Check if headlines are newer than last analysis
     try:
         with open("latest_headlines.json", "r", encoding="utf-8") as f:
             data = json.load(f)
-            headlines = data.get("headlines", [])
+            headlines_timestamp = data.get("timestamp")
             
-            # Check if any headlines mention this country
-            country_headlines = [h for h in headlines if country_name.lower() in h.lower()]
-            
-            if not country_headlines:
-                print(f"  [i]  No new headlines for {country_name} - Using cached analysis")
-                return False
-            
-            print(f"  [OK] Found {len(country_headlines)} new headlines for {country_name}")
-            return True
-            
+            if headlines_timestamp:
+                headlines_dt = datetime.fromisoformat(headlines_timestamp.replace('Z', '+00:00'))
+                
+                # If headlines are NEWER than last analysis, re-analyze
+                if headlines_dt > last_scored_dt:
+                    print(f"  [NEW DATA] {country_name} - headlines from {headlines_dt.strftime('%H:%M')}, analysis from {last_scored_dt.strftime('%H:%M')}")
+                    return True
+                else:
+                    print(f"  [CACHED] {country_name} - analysis is current (last scored {hours_since:.1f}h ago)")
+                    return False
+                    
     except FileNotFoundError:
-        # No headlines file - analyze anyway (scheduled run)
+        print(f"  [!] No headlines file - will analyze anyway")
         return True
+    except Exception as e:
+        print(f"  [!] Error checking headlines: {e}")
+        return True
+    
+    # Default to not re-analyzing if we got here
+    print(f"  [CACHED] {country_name} - no new data")
+    return False
 
 
 def analyze_country_layers(country_name, country_id):
