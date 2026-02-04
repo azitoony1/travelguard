@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TravelGuard — Global Threat Map</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        :root {
+            --bg: #0a0e14;
+            --surface: #131920;
+            --surface-elevated: #1a2129;
+            --border: #232b36;
+            --text: #e6edf3;
+            --text-dim: #8b949e;
+            --text-muted: #6e7681;
+            --green: #3fb950;
+            --yellow: #ffff00;
+            --orange: #f97316;
+            --red: #f85149;
+            --purple: #8b4fc9;  /* Darker, more menacing purple */
+            --accent: #58a6ff;
+            --gray: #3d4451;
+        }
+        
+        body {
+            font-family: 'IBM Plex Sans', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        header {
+            padding: 16px 24px;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            z-index: 3000;  /* Higher than detail panel */
+            position: relative;
+        }
+        
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 24px;
+        }
+        
+        h1 {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 20px;
+            font-weight: 700;
+        }
+        
+        .header-center {
+            flex: 1;
+            max-width: 400px;
+            position: relative;
+        }
+        
+        .search-box {
+            width: 100%;
+            padding: 10px 16px;
+            background: var(--surface-elevated);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 14px;
+        }
+        
+        .search-box:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+        
+        .search-results {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            margin-top: 8px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            max-height: 300px;
+            overflow-y: auto;
+            display: none;
+            z-index: 2000;
+        }
+        
+        .search-results.active {
+            display: block;
+        }
+        
+        .search-result-item {
+            padding: 12px 16px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .search-result-item:hover {
+            background: var(--surface-elevated);
+        }
+        
+        .identity-toggle {
+            display: inline-flex;
+            background: var(--surface-elevated);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 4px;
+        }
+        
+        .toggle-option {
+            font-family: 'JetBrains Mono', monospace;
+            padding: 8px 16px;
+            font-size: 11px;
+            font-weight: 500;
+            border: none;
+            background: transparent;
+            color: var(--text-dim);
+            cursor: pointer;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+        }
+        
+        .toggle-option:hover { color: var(--text); }
+        .toggle-option.active {
+            background: var(--accent);
+            color: var(--bg);
+        }
+        
+        #map {
+            flex: 1;
+            width: 100%;
+        }
+        
+        .leaflet-container {
+            background: #1a1f2e;
+        }
+        
+        .leaflet-popup-content-wrapper {
+            background: var(--surface);
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+        }
+        
+        .leaflet-popup-tip {
+            background: var(--surface);
+        }
+        
+        .country-popup {
+            padding: 8px;
+        }
+        
+        .popup-country-name {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        
+        .popup-threat-level {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            padding: 6px 12px;
+            border-radius: 6px;
+            display: inline-block;
+        }
+        
+        .popup-threat-level.green { 
+            background: var(--green); 
+            color: #000;
+            box-shadow: 0 0 20px rgba(63, 185, 80, 0.6);
+        }
+        .popup-threat-level.yellow { 
+            background: var(--yellow); 
+            color: #000;
+            box-shadow: 0 0 20px rgba(255, 255, 0, 0.6);
+        }
+        .popup-threat-level.orange { 
+            background: var(--orange); 
+            color: #fff;
+            box-shadow: 0 0 20px rgba(249, 115, 22, 0.6);
+        }
+        .popup-threat-level.red { 
+            background: var(--red); 
+            color: #fff;
+            box-shadow: 0 0 20px rgba(248, 81, 73, 0.6);
+        }
+        .popup-threat-level.purple { 
+            background: var(--purple); 
+            color: #fff;
+            box-shadow: 0 0 20px rgba(139, 79, 201, 0.6);
+        }
+        
+        .legend {
+            position: absolute;
+            bottom: 32px;
+            right: 32px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px;
+            z-index: 1000;
+            min-width: 180px;
+        }
+        
+        .legend-title {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-dim);
+            margin-bottom: 12px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
+        }
+        
+        .legend-label {
+            font-size: 12px;
+        }
+        
+        .detail-panel {
+            position: fixed;
+            top: 70px;  /* Start below header */
+            right: -450px;
+            width: 450px;  /* Narrower */
+            height: calc(100vh - 70px);
+            background: var(--surface);
+            border-left: 1px solid var(--border);
+            z-index: 2000;
+            transition: right 0.3s ease;
+            overflow-y: auto;
+        }
+        
+        .detail-panel.open {
+            right: 0;
+        }
+        
+        .detail-header {
+            padding: 24px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+        }
+        
+        .detail-country-name {
+            font-size: 24px;
+            font-weight: 600;
+            flex: 1;
+        }
+        
+        .back-to-map {
+            font-family: 'JetBrains Mono', monospace;
+            padding: 8px 16px;
+            background: var(--surface-elevated);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text);
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .back-to-map:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+        
+        .close-detail {
+            background: transparent;
+            border: none;
+            color: var(--text-dim);
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0;
+            margin-left: 8px;
+        }
+        
+        .close-detail:hover { color: var(--text); }
+        
+        .detail-content {
+            padding: 24px;
+        }
+        
+        .detail-threat-badge {
+            font-family: 'JetBrains Mono', monospace;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 700;
+            text-transform: uppercase;
+            display: inline-block;
+            margin-bottom: 24px;
+        }
+        
+        .detail-threat-badge.green { 
+            background: var(--green); 
+            color: #000;
+            box-shadow: 0 0 30px rgba(63, 185, 80, 0.8);
+        }
+        .detail-threat-badge.yellow { 
+            background: var(--yellow); 
+            color: #000;
+            box-shadow: 0 0 30px rgba(255, 255, 0, 0.8);
+        }
+        .detail-threat-badge.orange { 
+            background: var(--orange); 
+            color: #fff;
+            box-shadow: 0 0 30px rgba(249, 115, 22, 0.8);
+        }
+        .detail-threat-badge.red { 
+            background: var(--red); 
+            color: #fff;
+            box-shadow: 0 0 30px rgba(248, 81, 73, 0.8);
+        }
+        .detail-threat-badge.purple { 
+            background: var(--purple); 
+            color: #fff;
+            box-shadow: 0 0 30px rgba(139, 79, 201, 0.8);
+        }
+        
+        .category-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            background: var(--surface-elevated);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            margin-bottom: 8px;
+        }
+        
+        .category-name {
+            font-size: 13px;
+            color: var(--text-dim);
+        }
+        
+        .category-level {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            padding: 4px 10px;
+            border-radius: 4px;
+        }
+        
+        .category-level.green { 
+            background: var(--green); 
+            color: #000;
+            box-shadow: 0 0 15px rgba(63, 185, 80, 0.6);
+        }
+        .category-level.yellow { 
+            background: var(--yellow); 
+            color: #000;
+            box-shadow: 0 0 15px rgba(255, 255, 0, 0.6);
+        }
+        .category-level.orange { 
+            background: var(--orange); 
+            color: #fff;
+            box-shadow: 0 0 15px rgba(249, 115, 22, 0.6);
+        }
+        .category-level.red { 
+            background: var(--red); 
+            color: #fff;
+            box-shadow: 0 0 15px rgba(248, 81, 73, 0.6);
+        }
+        .category-level.purple { 
+            background: var(--purple); 
+            color: #fff;
+            box-shadow: 0 0 15px rgba(139, 79, 201, 0.6);
+        }
+        
+        .detail-section {
+            margin-bottom: 24px;
+        }
+        
+        .section-title {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-dim);
+            margin-bottom: 12px;
+        }
+        
+        .section-content {
+            font-size: 14px;
+            line-height: 1.7;
+        }
+        
+        .rec-item {
+            margin-bottom: 16px;
+            padding: 12px;
+            background: var(--surface-elevated);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+        }
+        
+        .rec-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--accent);
+            margin-bottom: 4px;
+        }
+        
+        .rec-text {
+            font-size: 13px;
+            color: var(--text-dim);
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <h1>TRAVELGUARD</h1>
+            <div class="header-center">
+                <input type="text" class="search-box" id="country-search" placeholder="Search countries..." autocomplete="off">
+                <div class="search-results" id="search-results"></div>
+            </div>
+            <div class="identity-toggle">
+                <button class="toggle-option active" data-layer="base">General</button>
+                <button class="toggle-option" data-layer="jewish_israeli">Jewish · Israeli</button>
+            </div>
+        </div>
+    </header>
+    
+    <div id="map"></div>
+    
+    <div class="legend">
+        <div class="legend-title">Threat Levels</div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: var(--green);"></div>
+            <div class="legend-label">Low</div>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: var(--yellow);"></div>
+            <div class="legend-label">Elevated</div>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: var(--orange);"></div>
+            <div class="legend-label">Significant</div>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: var(--red);"></div>
+            <div class="legend-label">High</div>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: var(--purple);"></div>
+            <div class="legend-label">Critical</div>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: var(--gray);"></div>
+            <div class="legend-label">Not Analyzed</div>
+        </div>
+    </div>
+    
+    <div class="detail-panel" id="detail-panel">
+        <div class="detail-header">
+            <div class="detail-country-name" id="detail-country-name"></div>
+            <button class="back-to-map" onclick="backToMap()">← Back to Map</button>
+            <button class="close-detail" onclick="closeDetail()">×</button>
+        </div>
+        <div class="detail-content" id="detail-content"></div>
+    </div>
+    
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        const SUPABASE_URL = 'https://pmyklavxwqgykvyvqxao.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBteWtsYXZ4d3FneWt2eXZxeGFvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAwNjIwNjMsImV4cCI6MjA4NTYzODA2M30.g9E9rtOSOeGN1Yk_BGyRoLHffx4Q1FEhNpDKS4gvPCs';
+        
+        let map;
+        let currentLayer = 'base';
+        let scoresData = {};
+        let countryLayers = {};
+        let geoJsonLayer;
+        
+        const THREAT_LABELS = {
+            'GREEN': 'Low',
+            'YELLOW': 'Elevated',
+            'ORANGE': 'Significant',
+            'RED': 'High',
+            'PURPLE': 'Critical'
+        };
+        
+        const THREAT_COLORS = {
+            'GREEN': '#3fb950',
+            'YELLOW': '#ffff00',
+            'ORANGE': '#f97316',
+            'RED': '#f85149',
+            'PURPLE': '#8b4fc9'
+        };
+        
+        // Manual country bounds
+        const COUNTRY_BOUNDS = {
+            'Netherlands': [[50.75, 3.36], [53.55, 7.23]],
+            'Israel': [[29.5, 34.3], [33.3, 35.9]],
+            'Aruba': [[12.4, -70.1], [12.6, -69.8]]
+        };
+        
+        // ONLY analyze these countries for MVP
+        const MVP_COUNTRIES = ['Israel', 'Netherlands'];
+        
+        async function fetchScores() {
+            const r = await fetch(`${SUPABASE_URL}/rest/v1/scores?select=*,countries(name,iso_code)`, {
+                headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
+            });
+            const data = await r.json();
+            
+            scoresData = {};
+            data.forEach(score => {
+                const country = score.countries.name;
+                // ONLY keep MVP countries
+                if (MVP_COUNTRIES.includes(country)) {
+                    if (!scoresData[country]) scoresData[country] = {};
+                    scoresData[country][score.identity_layer] = score;
+                }
+            });
+            
+            console.log('MVP Countries with scores:', Object.keys(scoresData));
+        }
+        
+        function getCountryStyle(feature) {
+            const countryName = feature.properties.name;
+            const score = scoresData[countryName]?.[currentLayer];
+            
+            if (score) {
+                const color = THREAT_COLORS[score.total_score];
+                return {
+                    fillColor: color,
+                    fillOpacity: 0.5,
+                    color: color,
+                    weight: 2,
+                    opacity: 0.9
+                };
+            }
+            
+            return {
+                fillColor: '#2d333b',
+                fillOpacity: 0.25,
+                color: '#232b36',
+                weight: 0.5,
+                opacity: 0.5
+            };
+        }
+        
+        function updateMapColors() {
+            if (geoJsonLayer) {
+                geoJsonLayer.eachLayer(layer => {
+                    const feature = layer.feature;
+                    layer.setStyle(getCountryStyle(feature));
+                });
+            }
+        }
+        
+        function showCountryDetail(countryName) {
+            const score = scoresData[countryName]?.[currentLayer];
+            if (!score) {
+                console.log('No score for:', countryName);
+                return;
+            }
+            
+            const level = score.total_score.toLowerCase();
+            const label = THREAT_LABELS[score.total_score];
+            const recs = JSON.parse(score.recommendations || '{}');
+            
+            document.getElementById('detail-country-name').textContent = countryName;
+            document.getElementById('detail-content').innerHTML = `
+                <div class="detail-threat-badge ${level}">${label}</div>
+                <div class="threat-categories">
+                    ${['armed_conflict', 'regional_instability', 'terrorism', 'civil_strife', 'crime', 'health', 'infrastructure'].map(cat => `
+                        <div class="category-item">
+                            <span class="category-name">${cat.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</span>
+                            <span class="category-level ${score[cat].toLowerCase()}">${THREAT_LABELS[score[cat]]}</span>
+                        </div>
+                    `).join('')}
+                </div>
+                <div class="detail-section">
+                    <div class="section-title">Situation Assessment</div>
+                    <div class="section-content">${score.ai_summary || 'No summary.'}</div>
+                </div>
+                <div class="detail-section">
+                    <div class="section-title">Recommendations</div>
+                    ${Object.entries(recs).map(([k,v]) => `
+                        <div class="rec-item">
+                            <div class="rec-label">${k.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</div>
+                            <div class="rec-text">${v}</div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+            
+            document.getElementById('detail-panel').classList.add('open');
+            
+            // Zoom to country
+            if (COUNTRY_BOUNDS[countryName]) {
+                map.fitBounds(COUNTRY_BOUNDS[countryName], { padding: [50, 50] });
+            } else if (countryLayers[countryName]) {
+                map.fitBounds(countryLayers[countryName].getBounds(), { padding: [50, 50], maxZoom: 7 });
+            }
+        }
+        
+        function closeDetail() {
+            document.getElementById('detail-panel').classList.remove('open');
+        }
+        
+        function backToMap() {
+            // Zoom out to world view
+            map.setView([35, 20], 3, { animate: true, duration: 0.5 });
+        }
+        
+        async function initMap() {
+            console.log('=== TravelGuard MVP Init ===');
+            
+            map = L.map('map').setView([35, 20], 3);
+            
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                attribution: '© OpenStreetMap © CARTO'
+            }).addTo(map);
+            
+            await fetchScores();
+            
+            const response = await fetch('https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson');
+            const fullData = await response.json();
+            
+            // Process features to split Netherlands MultiPolygon
+            const filteredFeatures = [];
+            
+            fullData.features.forEach(feature => {
+                const name = feature.properties.name;
+                
+                // Skip explicitly named Caribbean territories
+                const caribbeanTerritories = [
+                    'Aruba', 'Curaçao', 'Curacao', 'Sint Maarten', 'Bonaire', 
+                    'Saba', 'Sint Eustatius', 'Caribbean Netherlands'
+                ];
+                
+                if (caribbeanTerritories.includes(name)) {
+                    console.log('Skipping Caribbean territory:', name);
+                    return;
+                }
+                
+                // For Netherlands, split MultiPolygon and only keep European parts
+                if (name === 'Netherlands' && feature.geometry.type === 'MultiPolygon') {
+                    const europeanPolygons = [];
+                    
+                    feature.geometry.coordinates.forEach(polygon => {
+                        // Check first coordinate of this polygon
+                        const lat = polygon[0][0][1];
+                        
+                        // Only keep if latitude > 30 (Europe, not Caribbean at ~12°N)
+                        if (lat > 30) {
+                            europeanPolygons.push(polygon);
+                        } else {
+                            console.log('Filtering Caribbean Netherlands polygon at lat:', lat);
+                        }
+                    });
+                    
+                    // Only add if we have European polygons
+                    if (europeanPolygons.length > 0) {
+                        const europeanFeature = {
+                            ...feature,
+                            geometry: {
+                                type: 'MultiPolygon',
+                                coordinates: europeanPolygons
+                            }
+                        };
+                        filteredFeatures.push(europeanFeature);
+                    }
+                } else {
+                    // Keep all other countries as-is
+                    filteredFeatures.push(feature);
+                }
+            });
+            
+            console.log('Filtered features:', filteredFeatures.length, 'of', fullData.features.length);
+            
+            const filteredData = {
+                type: 'FeatureCollection',
+                features: filteredFeatures
+            };
+            
+            geoJsonLayer = L.geoJSON(filteredData, {
+                style: getCountryStyle,
+                onEachFeature: (feature, layer) => {
+                    const countryName = feature.properties.name;
+                    countryLayers[countryName] = layer;
+                    
+                    const score = scoresData[countryName]?.[currentLayer];
+                    
+                    if (score) {
+                        layer.on({
+                            mouseover: () => layer.setStyle({ weight: 4, color: '#58a6ff', fillOpacity: 0.7 }),
+                            mouseout: () => layer.setStyle(getCountryStyle(feature)),
+                            click: () => {
+                                console.log('Clicked MVP country:', countryName);
+                                showCountryDetail(countryName);
+                            }
+                        });
+                        
+                        // NO POPUP - removed as requested
+                    }
+                }
+            }).addTo(map);
+            
+            console.log('=== Map Ready ===');
+            console.log('MVP countries:', Object.keys(scoresData));
+        }
+        
+        // Identity toggle
+        document.querySelectorAll('.toggle-option').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.toggle-option').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentLayer = btn.dataset.layer;
+                updateMapColors();
+                
+                const panel = document.getElementById('detail-panel');
+                if (panel.classList.contains('open')) {
+                    const country = document.getElementById('detail-country-name').textContent;
+                    showCountryDetail(country);
+                }
+            });
+        });
+        
+        // Search
+        const searchInput = document.getElementById('country-search');
+        const searchResults = document.getElementById('search-results');
+        
+        searchInput.addEventListener('input', e => {
+            const query = e.target.value.toLowerCase();
+            if (!query) {
+                searchResults.classList.remove('active');
+                return;
+            }
+            
+            const matches = Object.keys(scoresData).filter(c => c.toLowerCase().includes(query));
+            searchResults.innerHTML = matches.length 
+                ? matches.map(c => `<div class="search-result-item" onclick="selectCountry('${c}')">${c}</div>`).join('')
+                : '<div class="search-result-item">No MVP countries found</div>';
+            searchResults.classList.add('active');
+        });
+        
+        window.selectCountry = function(name) {
+            searchResults.classList.remove('active');
+            searchInput.value = '';
+            showCountryDetail(name);
+        };
+        
+        document.addEventListener('click', e => {
+            if (!e.target.closest('.header-center')) {
+                searchResults.classList.remove('active');
+            }
+        });
+        
+        initMap();
+        setInterval(() => {
+            fetchScores().then(updateMapColors);
+        }, 5 * 60 * 1000);
+    </script>
+</body>
+</html>

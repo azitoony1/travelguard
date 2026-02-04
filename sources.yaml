@@ -1,0 +1,113 @@
+# TravelGuard — Data Sources Configuration (Fixed & Optimized)
+# 
+# This file defines all the sources the system pulls data from.
+# To add a new source, just add an entry here — no code changes needed.
+#
+# Tier 1: Cheap sources (poll every 2 hours)
+# Tier 2: LLM analysis (runs every 12 hours)
+
+# ============================================================================
+# GLOBAL SOURCES (apply to all countries)
+# ============================================================================
+
+global_base:
+  - name: "US State Department Travel Advisories RSS"
+    type: rss
+    url: "https://travel.state.gov/_res/rss/TAsTWs.xml"
+    tier: 1
+    refresh_hours: 2
+    
+  - name: "WHO Disease Outbreak News RSS"
+    type: rss
+    url: "https://www.who.int/feeds/entity/csr/don/en/rss.xml"
+    tier: 1
+    refresh_hours: 2
+
+global_identity:
+  jewish_israeli:
+    - name: "Israeli NSC Travel Warnings"
+      type: scrape
+      url: "https://www.gov.il/en/departments/dynamiccollectors/travel-warnings-nsc"
+      tier: 1
+      refresh_hours: 2
+      note: "English version of Israeli government travel warnings for Jews/Israelis abroad"
+    
+    - name: "Times of Israel - Antisemitism Tag RSS"
+      type: rss
+      url: "https://www.timesofisrael.com/tag/antisemitism/feed/"
+      tier: 1
+      refresh_hours: 2
+      note: "Global antisemitism news feed"
+
+# ============================================================================
+# ISRAEL — Country-Specific Sources
+# ============================================================================
+
+israel:
+  base:
+    - name: "Israel Red Alert API"
+      type: api
+      url: "https://www.oref.org.il/WarningMessages/alert/alerts.json"
+      tier: 1
+      refresh_hours: 2
+      note: "Returns empty JSON when no active alerts (this is good news!)"
+      
+    - name: "Times of Israel RSS"
+      type: rss
+      url: "https://www.timesofisrael.com/feed/"
+      tier: 1
+      refresh_hours: 2
+      
+    - name: "Jerusalem Post RSS"
+      type: rss
+      url: "https://www.jpost.com/rss/rssfeedsheadlines.aspx"
+      tier: 1
+      refresh_hours: 2
+
+# ============================================================================
+# NETHERLANDS — Country-Specific Sources
+# ============================================================================
+
+netherlands:
+  base:
+    - name: "NOS News RSS"
+      type: rss
+      url: "https://feeds.nos.nl/nosnieuwsalgemeen"
+      tier: 1
+      refresh_hours: 2
+      
+    - name: "NU.nl RSS"
+      type: rss
+      url: "https://www.nu.nl/rss/Algemeen"
+      tier: 1
+      refresh_hours: 2
+      
+    - name: "Dutch News - General RSS"
+      type: rss
+      url: "https://www.dutchnews.nl/feed/"
+      tier: 1
+      refresh_hours: 2
+      note: "English language Netherlands news"
+      
+    - name: "NCTV Terrorism Threat Assessment"
+      type: scrape
+      url: "https://english.nctv.nl/topics/terrorist-threat-assessment-netherlands/documents"
+      tier: 1
+      refresh_hours: 2
+      note: "Quarterly reports - may fail if site blocks scrapers"
+  
+  identity:
+    jewish_israeli:
+      - name: "CIDI Annual Reports Page"
+        type: scrape
+        url: "https://www.cidi.nl/antisemitisme/"
+        tier: 1
+        refresh_hours: 2
+        note: "Annual antisemitism monitor - may fail if site blocks scrapers"
+        
+      - name: "Dutch News RSS (filter for antisemitism)"
+        type: rss
+        url: "https://www.dutchnews.nl/feed/"
+        tier: 1
+        refresh_hours: 2
+        note: "Filter during analysis for Jewish community / antisemitism content"

@@ -1,0 +1,228 @@
+# Israeli NSC Travel Warnings for Jews/Israelis Abroad
+# Source: https://www.gov.il/he/pages/warninglevels
+# Last updated: 2026-02-02
+# 
+# Threat Levels:
+# 1 = No warning (safe)
+# 2 = Exercise increased caution
+# 3 = Reconsider travel / Medium threat
+# 4 = Do not travel / High threat
+# 5 = Varies by region
+
+# This file should be manually updated quarterly or when NSC issues major updates.
+# The system will use Times of Israel RSS to monitor for "NSC travel warning" news
+# and flag when this file needs updating.
+
+countries:
+  # LEVEL 1 - No Warning (Green)
+  Netherlands:
+    level: 1
+    note: "Safe for Israeli/Jewish travelers"
+  
+  Germany:
+    level: 1
+  
+  United Kingdom:
+    level: 1
+  
+  France:
+    level: 1
+    note: "Despite some antisemitic incidents, no official travel warning"
+  
+  Spain:
+    level: 1
+  
+  Italy:
+    level: 1
+  
+  Switzerland:
+    level: 1
+  
+  Austria:
+    level: 1
+  
+  Greece:
+    level: 1
+  
+  Cyprus:
+    level: 1
+  
+  Czech Republic:
+    level: 1
+  
+  Poland:
+    level: 1
+  
+  Romania:
+    level: 1
+  
+  Bulgaria:
+    level: 1
+  
+  Croatia:
+    level: 1
+  
+  Serbia:
+    level: 1
+  
+  United States:
+    level: 1
+  
+  Canada:
+    level: 1
+  
+  Australia:
+    level: 1
+  
+  New Zealand:
+    level: 1
+  
+  Japan:
+    level: 1
+  
+  South Korea:
+    level: 1
+  
+  Singapore:
+    level: 1
+  
+  Thailand:
+    level: 1
+    note: "Popular tourist destination for Israelis"
+  
+  India:
+    level: 1
+  
+  # LEVEL 2 - Exercise Increased Caution (Yellow)
+  Turkey:
+    level: 2
+    note: "Moderate threat, popular destination but caution advised"
+  
+  Egypt:
+    level: 2
+    note: "Excluding Sinai Peninsula (see Level 5)"
+  
+  Jordan:
+    level: 2
+  
+  Morocco:
+    level: 2
+  
+  United Arab Emirates:
+    level: 2
+    note: "Abraham Accords partner, but caution advised"
+  
+  Bahrain:
+    level: 2
+  
+  Azerbaijan:
+    level: 2
+  
+  Georgia:
+    level: 2
+  
+  Russia:
+    level: 2
+    note: "Heightened due to geopolitical situation"
+  
+  Ukraine:
+    level: 2
+    note: "Active war zone in eastern regions"
+  
+  Brazil:
+    level: 2
+  
+  Argentina:
+    level: 2
+  
+  Colombia:
+    level: 2
+  
+  Peru:
+    level: 2
+  
+  Chile:
+    level: 2
+  
+  Mexico:
+    level: 2
+  
+  South Africa:
+    level: 2
+  
+  Kenya:
+    level: 2
+  
+  Ethiopia:
+    level: 2
+  
+  # LEVEL 3 - Reconsider Travel (Orange)
+  Tunisia:
+    level: 3
+  
+  Algeria:
+    level: 3
+  
+  Mali:
+    level: 3
+  
+  Niger:
+    level: 3
+  
+  Burkina Faso:
+    level: 3
+  
+  Nigeria:
+    level: 3
+  
+  # LEVEL 4 - Do Not Travel (Red)
+  Iran:
+    level: 4
+    note: "Extreme threat - Israeli citizens prohibited"
+  
+  Iraq:
+    level: 4
+  
+  Syria:
+    level: 4
+  
+  Lebanon:
+    level: 4
+  
+  Yemen:
+    level: 4
+  
+  Libya:
+    level: 4
+  
+  Sudan:
+    level: 4
+  
+  Somalia:
+    level: 4
+  
+  Afghanistan:
+    level: 4
+  
+  Pakistan:
+    level: 4
+  
+  # LEVEL 5 - Mixed Threat (Varies by Region)
+  Egypt_Sinai:
+    level: 4
+    region: "Sinai Peninsula"
+    note: "Do not travel - active terrorism threat"
+    parent_country: "Egypt"
+  
+  Turkey_Southeast:
+    level: 3
+    region: "Southeast Turkey (border with Syria/Iraq)"
+    note: "Higher threat near conflict zones"
+    parent_country: "Turkey"
+  
+  # Note: This is a simplified version based on the image.
+  # Full list contains ~100+ countries with detailed regional breakdowns.
+  # Update this file when:
+  # 1. NSC publishes quarterly updates
+  # 2. Times of Israel reports major NSC warning changes
+  # 3. Geopolitical events warrant immediate updates
