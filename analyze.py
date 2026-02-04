@@ -57,7 +57,7 @@ def get_nsc_level_for_country(country_name, nsc_data):
 def build_analysis_prompt(country_name, identity_layer, nsc_level=None, base_analysis=None):
     """Build the Gemini analysis prompt."""
     
-    base_prompt = f"""You are a travel security analyst. Analyze the current threat situation in {country_name} for {'general travelers' if identity_layer == 'base' else 'Jewish and Israeli travelers'}.
+    base_prompt = f"""You are a travel security analyst. Analyze the current threat situation in {country_name} for {'general travelers' if identity_layer == 'base' else ('solo women travelers' if identity_layer == 'solo_women' else 'Jewish and Israeli travelers')}.
 
 IMPORTANT: Use the 5-level threat scale:
 - GREEN (1): Safe / Normal conditions
@@ -79,7 +79,34 @@ For each category, assign a threat level (GREEN/YELLOW/ORANGE/RED/PURPLE) based 
 
 """
 
-    if identity_layer == "jewish_israeli":
+    if identity_layer == "solo_women":
+        base_prompt += f"""
+IDENTITY-SPECIFIC ANALYSIS:
+You are analyzing threats specifically for SOLO WOMEN TRAVELERS.
+
+CRITICAL: Use the base layer assessment as your starting point and ONLY adjust categories where there are REAL gender-specific threats.
+
+Base layer assessment for reference:
+{format_base_analysis(base_analysis) if base_analysis else "Not available"}
+
+Consider gender-specific factors:
+- Gender-based violence and harassment
+- Sexual assault rates and legal protections
+- Cultural attitudes toward women (dress codes, behavior restrictions)
+- Women's rights and freedoms (can women travel alone legally?)
+- Safety of public transport/taxis for women
+- Availability of women-only accommodations/transport
+- Police response to crimes against women
+- Healthcare access for women
+
+IMPORTANT:
+- Most categories should be IDENTICAL to base layer unless there's a clear gender-specific difference
+- Don't invent differences where none exist  
+- Regional Instability, Infrastructure, Health are usually the same UNLESS they specifically affect women differently
+- Crime and Civil Strife are most likely to differ due to gender-based threats
+"""
+
+    elif identity_layer == "jewish_israeli":
         base_prompt += f"""
 IDENTITY-SPECIFIC ANALYSIS:
 You are analyzing threats specifically for Jewish and Israeli travelers. 
@@ -370,8 +397,8 @@ def should_analyze_country(country_name, country_id):
 
 def analyze_country_layers(country_name, country_id):
     """
-    Analyze both layers (base + identity) for a single country.
-    Returns results for both layers.
+    Analyze all three layers (base + jewish_israeli + solo_women) for a single country.
+    Returns results for all layers.
     """
     results = []
     
@@ -382,12 +409,19 @@ def analyze_country_layers(country_name, country_id):
         if store_analysis(country_id, "base", base_analysis):
             results.append(("base", base_analysis))
     
-    # Identity layer (with base context)
+    # Jewish/Israeli layer (with base context)
     print(f"\n[JEWISH]  JEWISH/ISRAELI LAYER: {country_name}")
     identity_analysis = analyze_country(country_name, "jewish_israeli", base_analysis)
     if identity_analysis:
         if store_analysis(country_id, "jewish_israeli", identity_analysis):
             results.append(("jewish_israeli", identity_analysis))
+    
+    # Solo Women layer (with base context)
+    print(f"\n[WOMEN]   SOLO WOMEN LAYER: {country_name}")
+    women_analysis = analyze_country(country_name, "solo_women", base_analysis)
+    if women_analysis:
+        if store_analysis(country_id, "solo_women", women_analysis):
+            results.append(("solo_women", women_analysis))
     
     return country_name, results
 
@@ -400,10 +434,30 @@ def main():
     print("="*44)
     print(f"\nStarted: {datetime.now(timezone.utc).isoformat()} UTC\n")
     
-    # MVP: Analyze Israel and Netherlands (European part only)
+    # MVP: 20 countries for global coverage
     countries = [
         ("Israel", "IL"),
-        ("Netherlands", "NL")
+        ("Netherlands", "NL"),
+        ("USA", "US"),
+        ("France", "FR"),
+        ("United Kingdom", "GB"),
+        ("Turkey", "TR"),
+        ("Thailand", "TH"),
+        ("Saudi Arabia", "SA"),
+        ("Russia", "RU"),
+        ("Democratic Republic of the Congo", "CD"),
+        ("Nigeria", "NG"),
+        ("Ukraine", "UA"),
+        ("Brazil", "BR"),
+        ("Australia", "AU"),
+        ("China", "CN"),
+        ("Egypt", "EG"),
+        ("India", "IN"),
+        ("Mexico", "MX"),
+        ("South Africa", "ZA"),
+        ("Poland", "PL"),
+        ("Iran", "IR"),
+        ("Libya", "LY")
     ]
     
     # Filter countries that need analysis (incremental updates)
