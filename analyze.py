@@ -209,9 +209,8 @@ def analyze_country(country_name, identity_layer="base", base_analysis=None):
     # Build prompt
     prompt = build_analysis_prompt(country_name, identity_layer, nsc_level, base_analysis)
     
-    # Note: In a real implementation, you'd include the actual ingested data here
-    # For now, we're using Gemini's knowledge + the NSC warnings
-    prompt += f"\n\nAnalyze {country_name} based on your knowledge of current events as of February 2026."
+    # Use Gemini's current knowledge (don't specify a future date)
+    prompt += f"\n\nAnalyze {country_name} based on your current knowledge and recent events."
     
     try:
         print("Sending request to Gemini 2.5 Flash...")
@@ -249,13 +248,21 @@ Check for:
 - Incorrect statistics or dates  
 - Fabricated advisories or sources
 - Claims contradicting well-known facts
+- Logical errors (e.g., wrong threat categorization)
 
 Respond with JSON:
 {{
   "has_issues": true/false,
   "problems": ["List specific issues, or empty if none"],
-  "confidence": "HIGH|MEDIUM|LOW"
+  "confidence": "HIGH|MEDIUM|LOW",
+  "severity": "CRITICAL|MAJOR|MINOR|NONE"
 }}
+
+Severity guide:
+- CRITICAL: Fabricated events, completely wrong facts, dangerous misinformation
+- MAJOR: Significant logical errors, wrong categorization, outdated info presented as current
+- MINOR: Small inconsistencies, unclear phrasing, debatable interpretations
+- NONE: No issues found
 """
         
         try:
@@ -275,16 +282,69 @@ Respond with JSON:
             
             verification = json.loads(verify_text)
             
-            if verification.get("has_issues"):
-                print(f"[!] Potential issues detected:")
+            has_issues = verification.get("has_issues", False)
+            severity = verification.get("severity", "NONE")
+            confidence = verification.get("confidence", "MEDIUM")
+            
+            # Decision logic based on severity and confidence
+            if severity == "CRITICAL" and confidence == "HIGH":
+                print(f"[X] BLOCKED - Critical issues detected:")
                 for issue in verification.get("problems", []):
                     print(f"    - {issue}")
-                print(f"    Confidence: {verification.get('confidence')}")
+                print(f"    This analysis will NOT be stored.")
+                return None
+                
+            elif severity == "MAJOR":
+                print(f"[!] MAJOR issues detected - Requesting refinement:")
+                for issue in verification.get("problems", []):
+                    print(f"    - {issue}")
+                
+                # Auto-retry with correction prompt
+                print(f"[>] Attempting to fix issues...")
+                correction_prompt = f"""The previous analysis for {country_name} had these issues:
+
+{chr(10).join(verification.get('problems', []))}
+
+Please provide a corrected analysis addressing these specific problems. Use the same JSON structure but fix the identified errors.
+"""
+                
+                try:
+                    retry_response = client.models.generate_content(
+                        model='gemini-2.5-flash',
+                        contents=prompt + "\n\n" + correction_prompt
+                    )
+                    
+                    retry_text = retry_response.text.strip()
+                    if retry_text.startswith("```json"):
+                        retry_text = retry_text[7:]
+                    if retry_text.startswith("```"):
+                        retry_text = retry_text[3:]
+                    if retry_text.endswith("```"):
+                        retry_text = retry_text[:-3]
+                    retry_text = retry_text.strip()
+                    
+                    corrected_analysis = json.loads(retry_text)
+                    print("[OK] Corrected analysis generated")
+                    analysis = corrected_analysis
+                    
+                except Exception as retry_error:
+                    print(f"[!] Correction failed: {retry_error}")
+                    print(f"[!] Using original analysis with WARNING flag")
+                    analysis['_credibility_warning'] = f"MAJOR issues detected: {', '.join(verification.get('problems', []))}"
+                    
+            elif severity == "MINOR" or (has_issues and confidence == "LOW"):
+                print(f"[!] Minor issues detected (will still be stored):")
+                for issue in verification.get("problems", []):
+                    print(f"    - {issue}")
+                print(f"    Confidence: {confidence}")
+                analysis['_credibility_note'] = f"Minor issues flagged: {', '.join(verification.get('problems', []))}"
+                
             else:
-                print(f"[OK] Verification passed ({verification.get('confidence')} confidence)")
+                print(f"[OK] Verification passed ({confidence} confidence, {severity} severity)")
                 
         except Exception as ve:
             print(f"[!] Verification check failed: {ve}")
+            print(f"[!] Proceeding with analysis (no verification)")
         
         print(f"  Armed Conflict: {analysis.get('armed_conflict')}")
         print(f"  Terrorism: {analysis.get('terrorism')}")
