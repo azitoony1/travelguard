@@ -18,11 +18,11 @@
             --text: #e6edf3;
             --text-dim: #8b949e;
             --text-muted: #6e7681;
-            --green: #3fb950;
-            --yellow: #ffff00;
-            --orange: #f97316;
-            --red: #f85149;
-            --purple: #8b4fc9;  /* Darker, more menacing purple */
+            --green: #2d5a3d;      /* Muted forest green */
+            --yellow: #b8a02e;     /* Muted gold/amber */
+            --orange: #c45a1f;     /* Burnt orange */
+            --red: #b83232;        /* Deep red */
+            --purple: #6b3a8f;     /* Dark purple */
             --accent: #58a6ff;
             --gray: #3d4451;
         }
@@ -736,8 +736,10 @@
             'United States of America': 'USA',
             'United States': 'USA',
             'Russian Federation': 'Russia',
-            'Republic of the Congo': 'Democratic Republic of the Congo',
-            'Congo (Kinshasa)': 'Democratic Republic of the Congo',
+            'Democratic Republic of the Congo': 'Democratic Republic of the Congo',  // Keep DRC
+            'Congo (Kinshasa)': 'Democratic Republic of the Congo',  // Alt name for DRC
+            'Dem. Rep. Congo': 'Democratic Republic of the Congo',  // Another alt
+            // Republic of the Congo (Brazzaville) - NOT in our database, will be gray
             'Iran (Islamic Republic of)': 'Iran',
             'United Kingdom': 'United Kingdom',
             'Netherlands': 'Netherlands',
@@ -757,11 +759,11 @@
         };
         
         const THREAT_COLORS = {
-            'GREEN': '#3fb950',
-            'YELLOW': '#ffff00',
-            'ORANGE': '#f97316',
-            'RED': '#f85149',
-            'PURPLE': '#8b4fc9'
+            'GREEN': '#2d5a3d',   /* Muted forest green */
+            'YELLOW': '#b8a02e',  /* Muted gold/amber */
+            'ORANGE': '#c45a1f',  /* Burnt orange */
+            'RED': '#b83232',     /* Deep red */
+            'PURPLE': '#6b3a8f'   /* Dark purple */
         };
         
         // Manual country bounds (for countries with overseas territories or wrapping issues)
@@ -799,19 +801,19 @@
                 const color = THREAT_COLORS[score.total_score];
                 return {
                     fillColor: color,
-                    fillOpacity: 0.5,
+                    fillOpacity: 0.4,  /* Even more subtle */
                     color: color,
                     weight: 2,
-                    opacity: 0.9
+                    opacity: 0.8
                 };
             }
             
             return {
                 fillColor: '#2d333b',
-                fillOpacity: 0.25,
+                fillOpacity: 0.2,  /* Very subtle gray */
                 color: '#232b36',
                 weight: 0.5,
-                opacity: 0.5
+                opacity: 0.4
             };
         }
         
